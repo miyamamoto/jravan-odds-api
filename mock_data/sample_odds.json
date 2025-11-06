@@ -1,0 +1,175 @@
+{
+  "races": {
+    "2024010105010101": {
+      "race_id": "2024010105010101",
+      "race_name": "3歳未勝利",
+      "date": "20240101",
+      "venue": "東京",
+      "venue_code": "05",
+      "race_number": 1,
+      "distance": 1600,
+      "track_type": "芝",
+      "weather": "晴",
+      "track_condition": "良",
+      "post_time": "10:00",
+      "horses": [
+        {"umaban": 1, "horse_name": "サンプルホース1", "jockey": "騎手A"},
+        {"umaban": 2, "horse_name": "サンプルホース2", "jockey": "騎手B"},
+        {"umaban": 3, "horse_name": "サンプルホース3", "jockey": "騎手C"},
+        {"umaban": 4, "horse_name": "サンプルホース4", "jockey": "騎手D"},
+        {"umaban": 5, "horse_name": "サンプルホース5", "jockey": "騎手E"},
+        {"umaban": 6, "horse_name": "サンプルホース6", "jockey": "騎手F"},
+        {"umaban": 7, "horse_name": "サンプルホース7", "jockey": "騎手G"},
+        {"umaban": 8, "horse_name": "サンプルホース8", "jockey": "騎手H"}
+      ],
+      "odds": {
+        "O1": {
+          "record_type": "単勝・複勝オッズ",
+          "record_id": "O1",
+          "odds_time": "095830",
+          "odds_time_formatted": "09:58:30",
+          "tansho": [
+            {"umaban": 1, "odds": 2.5},
+            {"umaban": 2, "odds": 5.2},
+            {"umaban": 3, "odds": 8.7},
+            {"umaban": 4, "odds": 12.3},
+            {"umaban": 5, "odds": 15.6},
+            {"umaban": 6, "odds": 23.8},
+            {"umaban": 7, "odds": 35.2},
+            {"umaban": 8, "odds": 89.5}
+          ],
+          "fukusho": [
+            {"umaban": 1, "odds_min": 1.2, "odds_max": 1.5},
+            {"umaban": 2, "odds_min": 1.8, "odds_max": 2.3},
+            {"umaban": 3, "odds_min": 2.5, "odds_max": 3.2},
+            {"umaban": 4, "odds_min": 3.5, "odds_max": 4.8},
+            {"umaban": 5, "odds_min": 4.2, "odds_max": 5.9},
+            {"umaban": 6, "odds_min": 6.5, "odds_max": 9.2},
+            {"umaban": 7, "odds_min": 8.9, "odds_max": 12.5},
+            {"umaban": 8, "odds_min": 15.2, "odds_max": 22.8}
+          ],
+          "parsed_at": "2024-01-01T09:58:30"
+        },
+        "O2": {
+          "record_type": "枠連オッズ",
+          "record_id": "O2",
+          "odds_time": "095830",
+          "odds_time_formatted": "09:58:30",
+          "combinations": [
+            {"waku1": 1, "waku2": 2, "odds": 8.5},
+            {"waku1": 1, "waku2": 3, "odds": 15.2},
+            {"waku1": 1, "waku2": 4, "odds": 22.8},
+            {"waku1": 2, "waku2": 3, "odds": 35.6},
+            {"waku1": 2, "waku2": 4, "odds": 48.9}
+          ],
+          "parsed_at": "2024-01-01T09:58:30"
+        },
+        "O3": {
+          "record_type": "馬連オッズ",
+          "record_id": "O3",
+          "odds_time": "095830",
+          "odds_time_formatted": "09:58:30",
+          "combinations": [
+            {"uma1": 1, "uma2": 2, "odds": 12.5},
+            {"uma1": 1, "uma2": 3, "odds": 25.8},
+            {"uma1": 1, "uma2": 4, "odds": 38.6},
+            {"uma1": 2, "uma2": 3, "odds": 65.2},
+            {"uma1": 2, "uma2": 4, "odds": 89.5}
+          ],
+          "parsed_at": "2024-01-01T09:58:30"
+        },
+        "O4": {
+          "record_type": "ワイドオッズ",
+          "record_id": "O4",
+          "odds_time": "095830",
+          "odds_time_formatted": "09:58:30",
+          "combinations": [
+            {"uma1": 1, "uma2": 2, "odds_min": 3.5, "odds_max": 4.2},
+            {"uma1": 1, "uma2": 3, "odds_min": 6.8, "odds_max": 8.5},
+            {"uma1": 1, "uma2": 4, "odds_min": 9.2, "odds_max": 12.5},
+            {"uma1": 2, "uma2": 3, "odds_min": 15.8, "odds_max": 22.5},
+            {"uma1": 2, "uma2": 4, "odds_min": 22.5, "odds_max": 32.8}
+          ],
+          "parsed_at": "2024-01-01T09:58:30"
+        },
+        "O5": {
+          "record_type": "馬単オッズ",
+          "record_id": "O5",
+          "odds_time": "095830",
+          "odds_time_formatted": "09:58:30",
+          "combinations": [
+            {"uma1": 1, "uma2": 2, "odds": 18.5},
+            {"uma1": 1, "uma2": 3, "odds": 35.2},
+            {"uma1": 2, "uma1": 1, "odds": 28.9},
+            {"uma1": 2, "uma2": 3, "odds": 95.6}
+          ],
+          "parsed_at": "2024-01-01T09:58:30"
+        },
+        "O6": {
+          "record_type": "三連複・三連単オッズ",
+          "record_id": "O6",
+          "odds_time": "095830",
+          "odds_time_formatted": "09:58:30",
+          "sanrenpuku": [
+            {"uma1": 1, "uma2": 2, "uma3": 3, "odds": 85.6},
+            {"uma1": 1, "uma2": 2, "uma3": 4, "odds": 125.8}
+          ],
+          "sanrentan": [
+            {"uma1": 1, "uma2": 2, "uma3": 3, "odds": 285.6},
+            {"uma1": 1, "uma2": 3, "uma3": 2, "odds": 325.8}
+          ],
+          "parsed_at": "2024-01-01T09:58:30"
+        }
+      }
+    },
+    "2024010105010102": {
+      "race_id": "2024010105010102",
+      "race_name": "3歳新馬",
+      "date": "20240101",
+      "venue": "東京",
+      "venue_code": "05",
+      "race_number": 2,
+      "distance": 1400,
+      "track_type": "芝",
+      "weather": "晴",
+      "track_condition": "良",
+      "post_time": "10:30",
+      "horses": [
+        {"umaban": 1, "horse_name": "デモホース1", "jockey": "騎手X"},
+        {"umaban": 2, "horse_name": "デモホース2", "jockey": "騎手Y"},
+        {"umaban": 3, "horse_name": "デモホース3", "jockey": "騎手Z"}
+      ],
+      "odds": {
+        "O1": {
+          "record_type": "単勝・複勝オッズ",
+          "record_id": "O1",
+          "odds_time": "102530",
+          "odds_time_formatted": "10:25:30",
+          "tansho": [
+            {"umaban": 1, "odds": 1.8},
+            {"umaban": 2, "odds": 3.5},
+            {"umaban": 3, "odds": 6.2}
+          ],
+          "fukusho": [
+            {"umaban": 1, "odds_min": 1.1, "odds_max": 1.3},
+            {"umaban": 2, "odds_min": 1.5, "odds_max": 2.0},
+            {"umaban": 3, "odds_min": 2.2, "odds_max": 3.5}
+          ],
+          "parsed_at": "2024-01-01T10:25:30"
+        }
+      }
+    }
+  },
+  "race_schedules": {
+    "20240101": [
+      "2024010105010101",
+      "2024010105010102",
+      "2024010105010103",
+      "2024010105010104"
+    ],
+    "20240102": [
+      "2024010205010101",
+      "2024010205010102"
+    ]
+  }
+}
