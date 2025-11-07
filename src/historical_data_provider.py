@@ -83,21 +83,49 @@ class HistoricalDataProvider:
             return races
 
         # キャッシュにない場合、フェッチャーで取得
-        if self._ensure_fetcher():
-            logger.info(f"Fetching race data from JV-Link")
-            raw_data = self.fetcher.get_race_data(date)
+        if self.auto_fetch and self._ensure_fetcher():
+            logger.info(f"Cache miss for {date}, fetching race data from JV-Link")
 
+            # レース情報を取得
+            raw_data = self.fetcher.get_race_data(date)
             races = []
+            race_dict = {}
+
             for data in raw_data:
                 # レースレコードのみ処理
                 if data['record_id'] == 'RA':
                     race_info = self._parse_race_info(data['raw_data'])
                     if race_info:
-                        races.append(race_info)
+                        race_id = race_info.get('race_id')
+                        if race_id:
+                            races.append(race_info)
+                            race_dict[race_id] = race_info
+
+            # オッズデータも取得してキャッシュに保存
+            if races:
+                logger.info(f"Fetching odds data for {len(races)} races")
+                odds_data = self.fetcher.get_odds_data(date)
+
+                # レースIDごとにグループ化
+                odds_by_race = {}
+                for data in odds_data:
+                    parsed = parse_odds_record(data['record_id'], data['raw_data'])
+                    if parsed:
+                        race_id = parsed.get('race_id', '')
+                        if race_id:
+                            if race_id not in odds_by_race:
+                                odds_by_race[race_id] = []
+                            odds_by_race[race_id].append(parsed)
+
+                # キャッシュに保存
+                for race_id, odds_list in odds_by_race.items():
+                    race_info = race_dict.get(race_id, {})
+                    self.cache.save_odds(race_id, odds_list, race_info)
+                    logger.info(f"Cached {len(odds_list)} odds for race {race_id}")
 
             return races
 
-        logger.warning(f"No race data available for {date}")
+        logger.warning(f"No race data available for {date} (auto_fetch={self.auto_fetch})")
         return []
 
     def _parse_race_info(self, raw_data: str) -> Optional[Dict]:

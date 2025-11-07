@@ -87,6 +87,8 @@ curl "http://localhost:8000/api/odds/2025110205041101?seconds_before_deadline=30
 
 ### セットアップ
 
+**方法1: 手動セットアップ（推奨）**
+
 ```bash
 # 過去データをダウンロード
 python -m scripts.setup_historical_db 20251102
@@ -94,6 +96,21 @@ python -m scripts.setup_historical_db 20251102
 # 日付範囲指定
 python -m scripts.setup_historical_db 20251101 --end-date 20251107
 ```
+
+**方法2: 自動取得**
+
+キャッシュにデータがない場合、自動的にJRA-VANから取得：
+
+```bash
+# .env
+HISTORICAL_AUTO_FETCH=true
+JRAVAN_SERVICE_KEY=YOUR_KEY
+
+# サーバー起動
+python run.py
+```
+
+詳細: [AUTO_FETCH_GUIDE.md](AUTO_FETCH_GUIDE.md)
 
 ### 使用方法
 
@@ -185,6 +202,7 @@ python run.py
 
 - [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - プロジェクト構造
 - [HISTORICAL_DATA_USAGE.md](HISTORICAL_DATA_USAGE.md) - 過去データ詳細
+- [AUTO_FETCH_GUIDE.md](AUTO_FETCH_GUIDE.md) - 自動取得機能
 - [JRA-VAN公式](https://jra-van.jp/dlb/)
 
 ## ライセンス
