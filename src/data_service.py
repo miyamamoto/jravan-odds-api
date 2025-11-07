@@ -10,13 +10,14 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from pathlib import Path
 
-from config import Config
-from mock_provider import get_mock_provider
-from time_manager import TimeManager, HistoricalOddsSimulator
+from .config import Config
+from .mock_provider import get_mock_provider
+from .time_manager import TimeManager, HistoricalOddsSimulator
+from .historical_data_provider import HistoricalDataProvider
 
 # 本番環境ではjravan_odds_fetcherをインポート
 try:
-    from jravan_odds_fetcher import JRAVANOddsFetcher
+    from .jravan_odds_fetcher import JRAVANOddsFetcher
     JRAVAN_AVAILABLE = True
 except ImportError:
     JRAVAN_AVAILABLE = False
@@ -32,19 +33,32 @@ class DataService:
     def __init__(self):
         """初期化"""
         self.use_mock = Config.USE_MOCK_DATA
+        self.use_historical = Config.is_development() and Config.ENABLE_HISTORICAL_DATA
         self.fetcher = None
         self.mock_provider = None
+        self.historical_provider = None
 
-        if self.use_mock:
+        if self.use_mock and not self.use_historical:
+            # 従来のモックモード（静的データ）
             logger.info("モックモードで起動します")
             self.mock_provider = get_mock_provider(Config.MOCK_DATA_FILE)
+        elif self.use_historical:
+            # 開発モード（蓄積系データ）
+            logger.info("開発モード（蓄積系データ）で起動します")
+            self.historical_provider = HistoricalDataProvider(
+                cache_dir=Config.HISTORICAL_CACHE_DIR,
+                service_key=Config.JRAVAN_SERVICE_KEY,
+                auto_fetch=Config.HISTORICAL_AUTO_FETCH
+            )
+            logger.info(f"Historical provider status: {self.historical_provider.get_status()}")
         else:
+            # 本番モード（リアルタイムデータ）
             if not JRAVAN_AVAILABLE:
                 raise RuntimeError(
                     "本番モードですが、JRAVANモジュールが利用できません。"
                     "32bit Pythonと pywin32がインストールされているか確認してください。"
                 )
-            logger.info("本番モードで起動します")
+            logger.info("本番モード（リアルタイムデータ）で起動します")
             self._initialize_jravan()
 
     def _initialize_jravan(self) -> bool:
@@ -71,7 +85,9 @@ class DataService:
             List[Dict]: レース情報のリスト
         """
         try:
-            if self.use_mock:
+            if self.use_historical:
+                return self.historical_provider.get_race_info(date)
+            elif self.use_mock:
                 return self.mock_provider.get_race_info(date)
             else:
                 if not self.fetcher:
@@ -101,6 +117,13 @@ class DataService:
                 - seconds_before_deadline: 指定された秒数
         """
         try:
+            # 蓄積系データモードの場合、historical_providerに委譲
+            if self.use_historical:
+                return self.historical_provider.get_realtime_odds(
+                    race_id,
+                    seconds_before_deadline
+                )
+
             # レース詳細を取得してpost_timeを取得
             race_detail = self.get_race_detail(race_id)
 
@@ -180,7 +203,9 @@ class DataService:
             Optional[Dict]: レース詳細情報
         """
         try:
-            if self.use_mock:
+            if self.use_historical:
+                return self.historical_provider.get_race_detail(race_id)
+            elif self.use_mock:
                 return self.mock_provider.get_race_detail(race_id)
             else:
                 # 本番環境の場合、オッズデータから情報を抽出
@@ -275,17 +300,34 @@ class DataService:
                 self.fetcher.close()
             except:
                 pass
+        if self.historical_provider:
+            try:
+                self.historical_provider.close()
+            except:
+                pass
 
     def get_status(self) -> Dict:
         """サービスの状態を取得"""
-        return {
-            'mode': 'mock' if self.use_mock else 'production',
+        status = {
             'jravan_available': JRAVAN_AVAILABLE,
-            'jravan_initialized': self.fetcher is not None,
-            'mock_provider_initialized': self.mock_provider is not None,
             'data_save_enabled': Config.ENABLE_DATA_SAVE,
             'cache_enabled': Config.ENABLE_CACHE
         }
+
+        # モード判定
+        if self.use_historical:
+            status['mode'] = 'development_historical'
+            status['historical_provider_initialized'] = self.historical_provider is not None
+            if self.historical_provider:
+                status['historical_provider_status'] = self.historical_provider.get_status()
+        elif self.use_mock:
+            status['mode'] = 'development_mock'
+            status['mock_provider_initialized'] = self.mock_provider is not None
+        else:
+            status['mode'] = 'production'
+            status['jravan_initialized'] = self.fetcher is not None
+
+        return status
 
 
 # グローバルインスタンス

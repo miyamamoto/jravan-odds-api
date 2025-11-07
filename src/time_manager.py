@@ -198,6 +198,115 @@ class HistoricalOddsSimulator:
     """過去オッズシミュレーター"""
 
     @staticmethod
+    def get_odds_at_time(
+        odds_timeline: list,
+        seconds_before_deadline: int
+    ) -> Optional[Dict]:
+        """
+        時系列オッズから指定時刻のオッズを取得
+
+        Args:
+            odds_timeline: 時系列オッズデータのリスト
+                [{'seconds_before_deadline': 600, 'odds': {...}}, ...]
+            seconds_before_deadline: 取得したい締め切り前の秒数
+
+        Returns:
+            Optional[Dict]: 指定時刻のオッズ（最も近い時刻）
+        """
+        if not odds_timeline:
+            return None
+
+        # 時系列データを締め切りまでの秒数でソート
+        sorted_timeline = sorted(
+            odds_timeline,
+            key=lambda x: x.get('seconds_before_deadline', 0)
+        )
+
+        # 指定時刻に最も近いデータを探す
+        closest = None
+        min_diff = float('inf')
+
+        for entry in sorted_timeline:
+            entry_seconds = entry.get('seconds_before_deadline', 0)
+            diff = abs(entry_seconds - seconds_before_deadline)
+
+            if diff < min_diff:
+                min_diff = diff
+                closest = entry
+
+        return closest.get('odds') if closest else None
+
+    @staticmethod
+    def interpolate_odds(
+        odds_before: Dict,
+        odds_after: Dict,
+        target_ratio: float
+    ) -> Dict:
+        """
+        2つのオッズデータから補間して新しいオッズを生成
+
+        Args:
+            odds_before: 前の時刻のオッズ
+            odds_after: 後の時刻のオッズ
+            target_ratio: 補間比率（0.0〜1.0）
+
+        Returns:
+            Dict: 補間されたオッズ
+        """
+        import copy
+
+        interpolated = copy.deepcopy(odds_before)
+        record_id = interpolated.get('record_id', '')
+
+        def interpolate_value(val1, val2, ratio):
+            """数値を補間"""
+            return round(val1 + (val2 - val1) * ratio, 1)
+
+        # 単勝・複勝
+        if record_id == 'O1':
+            if 'tansho' in interpolated and 'tansho' in odds_after:
+                for i, item in enumerate(interpolated['tansho']):
+                    if i < len(odds_after['tansho']):
+                        after_item = odds_after['tansho'][i]
+                        item['odds'] = interpolate_value(
+                            item['odds'],
+                            after_item['odds'],
+                            target_ratio
+                        )
+
+            if 'fukusho' in interpolated and 'fukusho' in odds_after:
+                for i, item in enumerate(interpolated['fukusho']):
+                    if i < len(odds_after['fukusho']):
+                        after_item = odds_after['fukusho'][i]
+                        item['odds_min'] = interpolate_value(
+                            item['odds_min'],
+                            after_item['odds_min'],
+                            target_ratio
+                        )
+                        item['odds_max'] = interpolate_value(
+                            item['odds_max'],
+                            after_item['odds_max'],
+                            target_ratio
+                        )
+
+        # その他のオッズ
+        elif 'combinations' in interpolated and 'combinations' in odds_after:
+            for i, item in enumerate(interpolated['combinations']):
+                if i < len(odds_after['combinations']):
+                    after_item = odds_after['combinations'][i]
+                    if 'odds' in item and 'odds' in after_item:
+                        item['odds'] = interpolate_value(
+                            item['odds'],
+                            after_item['odds'],
+                            target_ratio
+                        )
+
+        interpolated['interpolated'] = True
+        interpolated['interpolation_ratio'] = target_ratio
+
+        return interpolated
+
+    @staticmethod
     def simulate_odds_at_time(
         current_odds: Dict,
         target_seconds_before: int,

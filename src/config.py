@@ -57,6 +57,12 @@ class Config:
     USE_MOCK_DATA = ENVIRONMENT == Environment.DEVELOPMENT
     MOCK_DATA_FILE = os.getenv("MOCK_DATA_FILE", "./mock_data/sample_odds.json")
 
+    # 蓄積系データ設定（開発モード用）
+    ENABLE_HISTORICAL_DATA = os.getenv("ENABLE_HISTORICAL_DATA", "true").lower() == "true"
+    HISTORICAL_CACHE_DIR = os.getenv("HISTORICAL_CACHE_DIR", "./historical_cache")
+    HISTORICAL_AUTO_FETCH = os.getenv("HISTORICAL_AUTO_FETCH", "false").lower() == "true"
+    HISTORICAL_DATA_RETENTION_DAYS = int(os.getenv("HISTORICAL_DATA_RETENTION_DAYS", "365"))
+
     @classmethod
     def is_development(cls) -> bool:
         """開発環境かどうか"""
@@ -77,6 +83,9 @@ class Config:
             "data_save_enabled": cls.ENABLE_DATA_SAVE,
             "api_host": cls.API_HOST,
             "api_port": cls.API_PORT,
+            "enable_historical_data": cls.ENABLE_HISTORICAL_DATA,
+            "historical_cache_dir": cls.HISTORICAL_CACHE_DIR,
+            "historical_auto_fetch": cls.HISTORICAL_AUTO_FETCH,
         }
 
 

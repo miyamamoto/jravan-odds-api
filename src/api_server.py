@@ -15,8 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from config import Config
-from data_service import get_data_service
+from .config import Config
+from .data_service import get_data_service
 
 
 # ロギング設定
