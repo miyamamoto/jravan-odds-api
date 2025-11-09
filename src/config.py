@@ -20,11 +20,21 @@ class Environment(str, Enum):
     PRODUCTION = "production"
 
 
+class DataSource(str, Enum):
+    """データソース種別"""
+    AUTO = "auto"           # 自動選択（環境変数による）
+    HISTORICAL = "historical"  # 過去データ（蓄積系）
+    REALTIME = "realtime"      # リアルタイムデータ（JV-Link）
+
+
 class Config:
     """アプリケーション設定"""
 
     # 環境設定
     ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+    # データソース設定
+    DEFAULT_DATA_SOURCE = os.getenv("DEFAULT_DATA_SOURCE", "auto")  # auto, historical, realtime
 
     # JRA-VAN設定
     JRAVAN_SERVICE_KEY = os.getenv("JRAVAN_SERVICE_KEY", "UNKNOWN")
@@ -84,6 +94,7 @@ class Config:
         """設定情報を取得"""
         return {
             "environment": cls.ENVIRONMENT,
+            "default_data_source": cls.DEFAULT_DATA_SOURCE,
             "use_mock_data": cls.USE_MOCK_DATA,
             "cache_enabled": cls.ENABLE_CACHE,
             "data_save_enabled": cls.ENABLE_DATA_SAVE,

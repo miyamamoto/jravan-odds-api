@@ -31,35 +31,40 @@ class DataService:
     """データサービスクラス"""
 
     def __init__(self):
-        """初期化"""
-        self.use_mock = Config.USE_MOCK_DATA
-        self.use_historical = Config.is_development() and Config.ENABLE_HISTORICAL_DATA
+        """初期化 - 両方のプロバイダーを初期化（利用可能な場合）"""
         self.fetcher = None
         self.mock_provider = None
         self.historical_provider = None
 
-        if self.use_mock and not self.use_historical:
-            # 従来のモックモード（静的データ）
-            logger.info("モックモードで起動します")
-            self.mock_provider = get_mock_provider(Config.MOCK_DATA_FILE)
-        elif self.use_historical:
-            # 開発モード（蓄積系データ）
-            logger.info("開発モード（蓄積系データ）で起動します")
-            self.historical_provider = HistoricalDataProvider(
-                cache_dir=Config.HISTORICAL_CACHE_DIR,
-                service_key=Config.JRAVAN_SERVICE_KEY,
-                auto_fetch=Config.HISTORICAL_AUTO_FETCH
-            )
-            logger.info(f"Historical provider status: {self.historical_provider.get_status()}")
-        else:
-            # 本番モード（リアルタイムデータ）
-            if not JRAVAN_AVAILABLE:
-                raise RuntimeError(
-                    "本番モードですが、JRAVANモジュールが利用できません。"
-                    "32bit Pythonと pywin32がインストールされているか確認してください。"
+        # 蓄積系データプロバイダーの初期化（常に試みる）
+        if Config.ENABLE_HISTORICAL_DATA:
+            try:
+                logger.info("蓄積系データプロバイダーを初期化します")
+                self.historical_provider = HistoricalDataProvider(
+                    cache_dir=Config.HISTORICAL_CACHE_DIR,
+                    service_key=Config.JRAVAN_SERVICE_KEY,
+                    auto_fetch=Config.HISTORICAL_AUTO_FETCH
                 )
-            logger.info("本番モード（リアルタイムデータ）で起動します")
-            self._initialize_jravan()
+                logger.info(f"蓄積系データプロバイダー初期化成功: {self.historical_provider.get_status()}")
+            except Exception as e:
+                logger.warning(f"蓄積系データプロバイダー初期化失敗: {e}")
+
+        # リアルタイムプロバイダーの初期化（JV-Link利用可能時のみ）
+        if JRAVAN_AVAILABLE:
+            try:
+                logger.info("リアルタイムデータプロバイダーを初期化します")
+                self._initialize_jravan()
+            except Exception as e:
+                logger.warning(f"リアルタイムデータプロバイダー初期化失敗: {e}")
+
+        # モックプロバイダーの初期化（開発用）
+        if Config.USE_MOCK_DATA:
+            logger.info("モックプロバイダーを初期化します")
+            self.mock_provider = get_mock_provider(Config.MOCK_DATA_FILE)
+
+        # 初期化状態をログ出力
+        logger.info(f"データサービス初期化完了 - Historical: {self.historical_provider is not None}, "
+                   f"Realtime: {self.fetcher is not None}, Mock: {self.mock_provider is not None}")
 
     def _initialize_jravan(self) -> bool:
         """JRA-VANを初期化"""
@@ -74,25 +79,81 @@ class DataService:
             logger.error(f"JRA-VAN初期化エラー: {e}")
             return False
 
-    def get_race_info(self, date: str) -> List[Dict]:
+    def _resolve_data_source(self, data_source: str) -> str:
+        """
+        データソースを解決
+
+        Args:
+            data_source: 指定されたデータソース ('auto', 'historical', 'realtime', 'mock')
+
+        Returns:
+            str: 解決されたデータソース
+        """
+        if data_source != 'auto':
+            return data_source
+
+        # autoの場合、環境変数とデフォルト設定から決定
+        default = Config.DEFAULT_DATA_SOURCE
+
+        if default == 'auto':
+            # auto設定の場合、環境に応じて自動選択
+            if Config.is_development():
+                # 開発環境: 蓄積系データ優先、なければモック
+                if self.historical_provider:
+                    return 'historical'
+                elif self.mock_provider:
+                    return 'mock'
+                elif self.fetcher:
+                    return 'realtime'
+            else:
+                # 本番環境: リアルタイム優先
+                if self.fetcher:
+                    return 'realtime'
+                elif self.historical_provider:
+                    return 'historical'
+        else:
+            return default
+
+        # フォールバック
+        if self.historical_provider:
+            return 'historical'
+        elif self.fetcher:
+            return 'realtime'
+        elif self.mock_provider:
+            return 'mock'
+
+        raise RuntimeError("利用可能なデータプロバイダーがありません")
+
+    def get_race_info(self, date: str, data_source: str = 'auto') -> List[Dict]:
         """
         指定日のレース情報を取得
 
         Args:
             date: 日付 (YYYYMMDD形式)
+            data_source: データソース ('auto', 'historical', 'realtime')
 
         Returns:
             List[Dict]: レース情報のリスト
         """
         try:
-            if self.use_historical:
+            # データソースの決定
+            source = self._resolve_data_source(data_source)
+
+            if source == 'historical':
+                if not self.historical_provider:
+                    raise RuntimeError("蓄積系データプロバイダーが初期化されていません")
                 return self.historical_provider.get_race_info(date)
-            elif self.use_mock:
+            elif source == 'realtime':
+                if not self.fetcher:
+                    raise RuntimeError("リアルタイムデータプロバイダーが初期化されていません")
+                return self.fetcher.get_race_info(date)
+            elif source == 'mock':
+                if not self.mock_provider:
+                    raise RuntimeError("モックプロバイダーが初期化されていません")
                 return self.mock_provider.get_race_info(date)
             else:
-                if not self.fetcher:
-                    raise RuntimeError("JRA-VANが初期化されていません")
-                return self.fetcher.get_race_info(date)
+                raise ValueError(f"不正なデータソース: {source}")
+
         except Exception as e:
             logger.error(f"レース情報取得エラー: {e}")
             return []
@@ -100,7 +161,8 @@ class DataService:
     def get_realtime_odds(
         self,
         race_id: str,
-        seconds_before_deadline: Optional[int] = None
+        seconds_before_deadline: Optional[int] = None,
+        data_source: str = 'auto'
     ) -> Dict:
         """
         リアルタイムオッズを取得
@@ -108,6 +170,7 @@ class DataService:
         Args:
             race_id: レースID
             seconds_before_deadline: 締め切りの何秒前のデータを取得するか（Noneの場合は最新）
+            data_source: データソース ('auto', 'historical', 'realtime', 'mock')
 
         Returns:
             Dict: オッズデータと締め切り情報
@@ -117,15 +180,20 @@ class DataService:
                 - seconds_before_deadline: 指定された秒数
         """
         try:
-            # 蓄積系データモードの場合、historical_providerに委譲
-            if self.use_historical:
+            # データソースの決定
+            source = self._resolve_data_source(data_source)
+
+            # 蓄積系データの場合、historical_providerに委譲
+            if source == 'historical':
+                if not self.historical_provider:
+                    raise RuntimeError("蓄積系データプロバイダーが初期化されていません")
                 return self.historical_provider.get_realtime_odds(
                     race_id,
                     seconds_before_deadline
                 )
 
             # レース詳細を取得してpost_timeを取得
-            race_detail = self.get_race_detail(race_id)
+            race_detail = self.get_race_detail(race_id, data_source=source)
 
             if not race_detail:
                 return {
@@ -141,12 +209,16 @@ class DataService:
             is_past = deadline_info.get('is_past', False)
 
             # オッズデータを取得
-            if self.use_mock:
+            if source == 'mock':
+                if not self.mock_provider:
+                    raise RuntimeError("モックプロバイダーが初期化されていません")
                 odds_data = self.mock_provider.get_realtime_odds(race_id)
-            else:
+            elif source == 'realtime':
                 if not self.fetcher:
-                    raise RuntimeError("JRA-VANが初期化されていません")
+                    raise RuntimeError("リアルタイムデータプロバイダーが初期化されていません")
                 odds_data = self.fetcher.get_realtime_odds(race_id)
+            else:
+                raise ValueError(f"不正なデータソース: {source}")
 
             # n秒前のデータをシミュレート
             if seconds_before_deadline is not None and seconds_before_deadline > 0:
@@ -192,24 +264,32 @@ class DataService:
                 'is_past_data': False
             }
 
-    def get_race_detail(self, race_id: str) -> Optional[Dict]:
+    def get_race_detail(self, race_id: str, data_source: str = 'auto') -> Optional[Dict]:
         """
         レース詳細情報を取得
 
         Args:
             race_id: レースID
+            data_source: データソース ('auto', 'historical', 'realtime', 'mock')
 
         Returns:
             Optional[Dict]: レース詳細情報
         """
         try:
-            if self.use_historical:
+            # データソースの決定
+            source = self._resolve_data_source(data_source)
+
+            if source == 'historical':
+                if not self.historical_provider:
+                    raise RuntimeError("蓄積系データプロバイダーが初期化されていません")
                 return self.historical_provider.get_race_detail(race_id)
-            elif self.use_mock:
+            elif source == 'mock':
+                if not self.mock_provider:
+                    raise RuntimeError("モックプロバイダーが初期化されていません")
                 return self.mock_provider.get_race_detail(race_id)
-            else:
+            elif source == 'realtime':
                 # 本番環境の場合、オッズデータから情報を抽出
-                odds_data = self.get_realtime_odds(race_id)
+                odds_data = self.get_realtime_odds(race_id, data_source=source)
                 if odds_data:
                     return {
                         'race_id': race_id,
@@ -217,6 +297,8 @@ class DataService:
                         'odds': odds_data
                     }
                 return None
+            else:
+                raise ValueError(f"不正なデータソース: {source}")
         except Exception as e:
             logger.error(f"レース詳細取得エラー: {e}")
             return None
@@ -311,21 +393,21 @@ class DataService:
         status = {
             'jravan_available': JRAVAN_AVAILABLE,
             'data_save_enabled': Config.ENABLE_DATA_SAVE,
-            'cache_enabled': Config.ENABLE_CACHE
+            'cache_enabled': Config.ENABLE_CACHE,
+            'default_data_source': Config.DEFAULT_DATA_SOURCE,
+            'environment': Config.ENVIRONMENT
         }
 
-        # モード判定
-        if self.use_historical:
-            status['mode'] = 'development_historical'
-            status['historical_provider_initialized'] = self.historical_provider is not None
-            if self.historical_provider:
-                status['historical_provider_status'] = self.historical_provider.get_status()
-        elif self.use_mock:
-            status['mode'] = 'development_mock'
-            status['mock_provider_initialized'] = self.mock_provider is not None
-        else:
-            status['mode'] = 'production'
-            status['jravan_initialized'] = self.fetcher is not None
+        # 各プロバイダーの初期化状態
+        status['providers'] = {
+            'historical': self.historical_provider is not None,
+            'realtime': self.fetcher is not None,
+            'mock': self.mock_provider is not None
+        }
+
+        # 蓄積系データプロバイダーのステータス
+        if self.historical_provider:
+            status['historical_provider_status'] = self.historical_provider.get_status()
 
         return status
 

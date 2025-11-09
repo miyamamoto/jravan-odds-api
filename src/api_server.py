@@ -9,6 +9,7 @@ import asyncio
 import logging
 from typing import Dict, List, Optional
 from datetime import datetime
+from enum import Enum
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +18,14 @@ from pydantic import BaseModel, Field
 
 from .config import Config
 from .data_service import get_data_service
+
+
+class DataSourceEnum(str, Enum):
+    """データソース選択"""
+    AUTO = "auto"
+    HISTORICAL = "historical"
+    REALTIME = "realtime"
+    MOCK = "mock"
 
 
 # ロギング設定
@@ -196,15 +205,22 @@ async def get_status():
 
 
 @app.get("/api/races/{date}", response_model=RaceInfoResponse)
-async def get_races(date: str):
+async def get_races(
+    date: str,
+    data_source: DataSourceEnum = Query(
+        DataSourceEnum.AUTO,
+        description="データソース (auto: 自動選択, historical: 過去データ, realtime: リアルタイム)"
+    )
+):
     """
     指定日のレース情報を取得
 
     Args:
         date: 日付 (YYYYMMDD形式)
+        data_source: データソース
     """
     try:
-        races = data_service.get_race_info(date)
+        races = data_service.get_race_info(date, data_source=data_source.value)
         return RaceInfoResponse(
             date=date,
             races=races,
@@ -223,6 +239,10 @@ async def get_odds(
         None,
         description="締め切りの何秒前のデータを取得するか（指定しない場合は最新データ）",
         ge=0
+    ),
+    data_source: DataSourceEnum = Query(
+        DataSourceEnum.AUTO,
+        description="データソース (auto: 自動選択, historical: 過去データ, realtime: リアルタイム)"
     )
 ):
     """
@@ -232,9 +252,14 @@ async def get_odds(
         race_id: レースID
         save: データを保存するか
         seconds_before_deadline: 締め切りの何秒前のデータを取得するか
+        data_source: データソース
     """
     try:
-        result = data_service.get_realtime_odds(race_id, seconds_before_deadline)
+        result = data_service.get_realtime_odds(
+            race_id,
+            seconds_before_deadline,
+            data_source=data_source.value
+        )
 
         if 'error' in result:
             raise HTTPException(
@@ -282,15 +307,22 @@ async def get_odds(
 
 
 @app.get("/api/race/{race_id}")
-async def get_race_detail(race_id: str):
+async def get_race_detail(
+    race_id: str,
+    data_source: DataSourceEnum = Query(
+        DataSourceEnum.AUTO,
+        description="データソース (auto: 自動選択, historical: 過去データ, realtime: リアルタイム)"
+    )
+):
     """
     レース詳細情報を取得
 
     Args:
         race_id: レースID
+        data_source: データソース
     """
     try:
-        detail = data_service.get_race_detail(race_id)
+        detail = data_service.get_race_detail(race_id, data_source=data_source.value)
 
         if not detail:
             raise HTTPException(
@@ -340,19 +372,24 @@ async def get_saved_odds(race_id: str):
 # WebSocket エンドポイント
 
 @app.websocket("/ws/odds/{race_id}")
-async def websocket_odds(websocket: WebSocket, race_id: str):
+async def websocket_odds(
+    websocket: WebSocket,
+    race_id: str,
+    data_source: str = Query("auto", description="データソース")
+):
     """
     リアルタイムオッズ配信WebSocket
 
     Args:
         websocket: WebSocket接続
         race_id: レースID
+        data_source: データソース
     """
     await manager.connect(race_id, websocket)
 
     try:
         # 初回データ送信
-        initial_result = data_service.get_realtime_odds(race_id)
+        initial_result = data_service.get_realtime_odds(race_id, data_source=data_source)
         await websocket.send_json({
             'type': 'initial',
             'race_id': race_id,
@@ -380,7 +417,7 @@ async def websocket_odds(websocket: WebSocket, race_id: str):
                 pass
 
             # オッズデータを取得して送信
-            result = data_service.get_realtime_odds(race_id)
+            result = data_service.get_realtime_odds(race_id, data_source=data_source)
             if result.get('odds'):
                 await websocket.send_json({
                     'type': 'update',

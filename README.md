@@ -6,7 +6,7 @@ JRA-VAN Data Labから競馬のリアルタイムオッズを取得するREST AP
 
 - 🚀 REST API（FastAPI）
 - 📡 WebSocketでリアルタイム配信
-- 🔧 開発/本番モード切り替え
+- 🔄 API呼び出し時のデータソース切り替え（過去データ/リアルタイム）
 - 💾 過去データ対応（蓄積系）
 - 🎯 全馬券種対応（単勝・複勝・枠連・馬連・ワイド・馬単・三連単）
 
@@ -21,16 +21,12 @@ pip install -r requirements.txt
 ### 2. サーバー起動
 
 ```bash
-# 開発モード（モックデータ）
-export ENVIRONMENT=development
-python run.py
-
-# 本番モード（JRA-VAN接続）
-export ENVIRONMENT=production
 python run.py
 ```
 
 APIドキュメント: http://localhost:8000/docs
+
+**注**: データソース（過去データ/リアルタイム）はAPI呼び出し時に`data_source`パラメータで指定できます。
 
 ## 必要な環境
 
@@ -75,11 +71,17 @@ jravan_odds_fetcher/
 # レース一覧
 curl http://localhost:8000/api/races/20251102
 
-# オッズ取得
+# オッズ取得（デフォルト）
 curl http://localhost:8000/api/odds/2025110205041101
 
-# 締め切り300秒前のオッズ（開発モード）
-curl "http://localhost:8000/api/odds/2025110205041101?seconds_before_deadline=300"
+# 過去データから取得
+curl "http://localhost:8000/api/odds/2025110205041101?data_source=historical"
+
+# リアルタイムデータから取得
+curl "http://localhost:8000/api/odds/2025110205041101?data_source=realtime"
+
+# 締め切り300秒前のオッズ（過去データ使用時）
+curl "http://localhost:8000/api/odds/2025110205041101?data_source=historical&seconds_before_deadline=300"
 ```
 
 ### 対応オッズタイプ
@@ -125,14 +127,14 @@ python run.py
 ### 使用方法
 
 ```bash
-export ENVIRONMENT=development
+# サーバー起動
 python run.py
 
-# 過去のオッズを取得
-curl http://localhost:8000/api/odds/2025110205041101
+# 過去データから取得（data_sourceパラメータで指定）
+curl "http://localhost:8000/api/odds/2025110205041101?data_source=historical"
 
 # 締め切り前をシミュレート
-curl "http://localhost:8000/api/odds/2025110205041101?seconds_before_deadline=300"
+curl "http://localhost:8000/api/odds/2025110205041101?data_source=historical&seconds_before_deadline=300"
 ```
 
 詳細: [HISTORICAL_DATA_USAGE.md](HISTORICAL_DATA_USAGE.md)
@@ -155,14 +157,17 @@ pytest tests/
 # 実行環境
 ENVIRONMENT=development            # development または production
 
-# JRA-VAN設定（本番モード）
+# データソース設定
+DEFAULT_DATA_SOURCE=auto           # auto, historical, realtime（デフォルト: auto）
+
+# JRA-VAN設定
 JRAVAN_SERVICE_KEY=YOUR_KEY
 
 # API設定
 API_HOST=0.0.0.0
 API_PORT=8000
 
-# 蓄積系データ設定（開発モード）
+# 蓄積系データ設定
 ENABLE_HISTORICAL_DATA=true
 HISTORICAL_CACHE_DIR=./historical_cache
 ```
