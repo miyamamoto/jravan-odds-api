@@ -7,6 +7,7 @@ JVOpenを使用して過去のオッズデータを取得します。
 
 import win32com.client
 import logging
+import time
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -17,11 +18,17 @@ logger = logging.getLogger(__name__)
 class HistoricalOddsFetcher:
     """JRA-VANから蓄積系データを取得するクラス"""
 
-    # データ種別コード
-    DATASPEC_RACE_INFO = "RA"      # レース情報
-    DATASPEC_RESULTS = "SE"         # 成績（確定後）
-    DATASPEC_ODDS = "0B31"          # オッズ詳細
+    # データ種別コード（JVOpen用）
+    DATASPEC_RACE_INFO = "RACE"     # レース情報
+    DATASPEC_RESULTS = "DIFF"       # 成績・差分データ
+    DATASPEC_ODDS = "NVO"           # オッズデータ（過去の速報系オッズ）
     DATASPEC_DIFF = "DIFF"          # 差分データ
+    DATASPEC_SNAP = "SNAP"          # スナップショット
+    DATASPEC_TOKU = "TOKU"          # 特殊データ
+    DATASPEC_NVO = "NVO"            # 過去の速報系データ
+    DATASPEC_0B11 = "0B11"          # 速報オッズ（単勝・複勝）
+    DATASPEC_0B30 = "0B30"          # 速報オッズ（全賭式: O1〜O6全て）
+    DATASPEC_0B31 = "0B31"          # 速報オッズ（単勝のみ: O1）
 
     # オプション
     OPTION_NORMAL = 1               # 通常データ取得
@@ -33,9 +40,13 @@ class HistoricalOddsFetcher:
         初期化
 
         Args:
-            service_key: JRA-VANのサービスキー
+            service_key: JRA-VANのサービスキー（このパラメータは使用されません）
+                        実際のサービスキーはJV-Link設定ツールで設定します
+                        JVInitには常に'UNKNOWN'を渡します
         """
-        self.service_key = service_key
+        # JV-Link設定ツールでサービスキーを設定している場合、
+        # JVInitには'UNKNOWN'を渡すのが正しい実装方法
+        self.service_key = 'UNKNOWN'
         self.jvlink = None
         self.is_initialized = False
 
@@ -56,8 +67,8 @@ class HistoricalOddsFetcher:
                 logger.error(f"JVInit error: {ret}")
                 return False
 
-            # UI設定
-            self.jvlink.JVSetUIProperties()
+            # UI設定はJV-Link設定ツールで事前に行うため、ここでは呼び出さない
+            # self.jvlink.JVSetUIProperties()
 
             self.is_initialized = True
             logger.info("JV-Link initialized (historical mode)")
@@ -93,11 +104,14 @@ class HistoricalOddsFetcher:
         try:
             option = self.OPTION_SETUP_DIALOG if show_dialog else self.OPTION_SETUP
 
+            # fromtimeをYYYYMMDDhhmmss形式に変換
+            fromtime = start_date + "000000" if len(start_date) == 8 else start_date
+
             logger.info(f"Starting database setup: {start_date} - {end_date or start_date}")
-            logger.info(f"Data spec: {dataspec}, Option: {option}")
+            logger.info(f"Data spec: {dataspec}, Option: {option}, FromTime: {fromtime}")
 
             # JVOpenでセットアップ
-            ret = self.jvlink.JVOpen(dataspec, start_date, option)
+            ret = self.jvlink.JVOpen(dataspec, fromtime, option)
 
             if isinstance(ret, tuple):
                 returncode = ret[0]
@@ -111,6 +125,21 @@ class HistoricalOddsFetcher:
                 return False, 0
 
             logger.info(f"Setup initiated successfully. Expected records: {readcount}")
+
+            # ダウンロード件数がある場合、ダウンロード完了を待つ
+            if isinstance(ret, tuple) and len(ret) > 2:
+                downloadcount = ret[2]
+                if downloadcount > 0:
+                    logger.info(f"Waiting for download to complete ({downloadcount} files)...")
+                    while True:
+                        status = self.jvlink.JVStatus()
+                        if status < 0:
+                            logger.error(f"JVStatus error: {status}")
+                            break
+                        if status >= downloadcount:
+                            logger.info("Download completed")
+                            break
+                        time.sleep(2)
 
             # データを読み込み（進捗確認用）
             total_records = 0
@@ -170,10 +199,13 @@ class HistoricalOddsFetcher:
         data_list = []
 
         try:
-            logger.info(f"Fetching data: date={start_date}, spec={dataspec}")
+            # fromtimeをYYYYMMDDhhmmss形式に変換
+            fromtime = start_date + "000000" if len(start_date) == 8 else start_date
+
+            logger.info(f"Fetching data: date={start_date}, spec={dataspec}, fromtime={fromtime}")
 
             # JVOpenでデータ取得開始
-            ret = self.jvlink.JVOpen(dataspec, start_date, option)
+            ret = self.jvlink.JVOpen(dataspec, fromtime, option)
 
             if isinstance(ret, tuple):
                 returncode = ret[0]
@@ -187,6 +219,21 @@ class HistoricalOddsFetcher:
                 return []
 
             logger.info(f"JVOpen success. Expected records: {readcount}")
+
+            # ダウンロード件数がある場合、ダウンロード完了を待つ
+            if isinstance(ret, tuple) and len(ret) > 2:
+                downloadcount = ret[2]
+                if downloadcount > 0:
+                    logger.info(f"Waiting for download to complete ({downloadcount} files)...")
+                    while True:
+                        status = self.jvlink.JVStatus()
+                        if status < 0:
+                            logger.error(f"JVStatus error: {status}")
+                            break
+                        if status >= downloadcount:
+                            logger.info("Download completed")
+                            break
+                        time.sleep(2)
 
             # データを読み込み
             record_count = 0

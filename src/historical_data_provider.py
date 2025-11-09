@@ -91,73 +91,123 @@ class HistoricalDataProvider:
             races = []
             race_dict = {}
 
+            # レコードIDの統計を取る
+            record_id_counts = {}
             for data in raw_data:
-                # レースレコードのみ処理
-                if data['record_id'] == 'RA':
-                    race_info = self._parse_race_info(data['raw_data'])
+                rid = data['record_id']
+                record_id_counts[rid] = record_id_counts.get(rid, 0) + 1
+                # レースレコードを処理（RA, H1, H6, JG）
+                if data['record_id'] in ['RA', 'H1', 'H6', 'JG']:
+                    race_info = self._parse_race_info(data['raw_data'], data['record_id'])
                     if race_info:
                         race_id = race_info.get('race_id')
-                        if race_id:
+                        if race_id and race_id not in race_dict:  # 重複を避ける
                             races.append(race_info)
                             race_dict[race_id] = race_info
 
-            # オッズデータも取得してキャッシュに保存
-            if races:
-                logger.info(f"Fetching odds data for {len(races)} races")
-                odds_data = self.fetcher.get_odds_data(date)
+            logger.info(f"Record ID counts: {record_id_counts}")
+            logger.info(f"Parsed {len(races)} unique races")
 
-                # レースIDごとにグループ化
+            # JGレコードからオッズデータも抽出してキャッシュに保存
+            if races:
+                logger.info(f"Extracting odds data from {len(raw_data)} JG records")
+
+                # レースIDごとにグループ化（JGレコードから）
                 odds_by_race = {}
-                for data in odds_data:
-                    parsed = parse_odds_record(data['record_id'], data['raw_data'])
-                    if parsed:
-                        race_id = parsed.get('race_id', '')
-                        if race_id:
-                            if race_id not in odds_by_race:
-                                odds_by_race[race_id] = []
-                            odds_by_race[race_id].append(parsed)
+                for data in raw_data:
+                    if data['record_id'] == 'JG':
+                        parsed = parse_odds_record(data['record_id'], data['raw_data'])
+                        if parsed and not parsed.get('error'):
+                            race_id = parsed.get('race_id', '')
+                            if race_id:
+                                if race_id not in odds_by_race:
+                                    odds_by_race[race_id] = []
+                                odds_by_race[race_id].append(parsed)
 
                 # キャッシュに保存
                 for race_id, odds_list in odds_by_race.items():
                     race_info = race_dict.get(race_id, {})
+                    # post_timeをrace_infoから取得
+                    if not race_info.get('post_time') and odds_list:
+                        race_info['post_time'] = odds_list[0].get('post_time', '10:00')
                     self.cache.save_odds(race_id, odds_list, race_info)
-                    logger.info(f"Cached {len(odds_list)} odds for race {race_id}")
+                    logger.info(f"Cached {len(odds_list)} odds records for race {race_id}")
 
             return races
 
         logger.warning(f"No race data available for {date} (auto_fetch={self.auto_fetch})")
         return []
 
-    def _parse_race_info(self, raw_data: str) -> Optional[Dict]:
+    def _parse_race_info(self, raw_data: str, record_id: str = 'RA') -> Optional[Dict]:
         """
         レース情報レコードをパース（簡易版）
 
         Args:
             raw_data: 生データ
+            record_id: レコードID ('RA', 'H1', 'JG', etc.)
 
         Returns:
             Optional[Dict]: パースされたレース情報
         """
         try:
-            if len(raw_data) < 50:
+            if len(raw_data) < 30:
                 return None
 
-            # 簡易的なパース（実際のフォーマットに応じて調整が必要）
-            # レースID: 位置11-26
-            race_id = raw_data[11:27].strip() if len(raw_data) > 27 else ""
+            # JGレコード（時系列オッズ情報）の場合
+            if record_id == 'JG':
+                # JGレコードフォーマット:
+                # JG[2] + データ区分[1] + 年月日[8] + レースID[16] + ...
+                # 位置: 0-1=JG, 2=データ区分, 3-10=年月日, 11-26=レースID
+                if len(raw_data) < 27:
+                    return None
 
-            # レース名: 位置112-162（推定）
-            race_name = raw_data[112:162].strip() if len(raw_data) > 162 else ""
+                race_id = raw_data[11:27].strip() if len(raw_data) > 27 else ""
 
-            return {
-                'race_id': race_id,
-                'race_name': race_name,
-                'record_id': 'RA',
-                'raw_data': raw_data
-            }
+                return {
+                    'race_id': race_id,
+                    'race_name': '',  # JGレコードにはレース名がない
+                    'post_time': '10:00',  # デフォルト値
+                    'record_id': record_id,
+                    'raw_data': raw_data
+                }
+
+            # H1レコード（馬毎レース情報）の場合
+            elif record_id in ['H1', 'H6']:
+                # H1レコードフォーマット:
+                # H1[2] + データ区分[1] + 年月日[8] + レースID[16] + ...
+                # 位置: 0-1=H1, 2=データ区分, 3-10=年月日, 11-26=レースID
+                if len(raw_data) < 27:
+                    return None
+
+                race_id = raw_data[11:27].strip() if len(raw_data) > 27 else ""
+
+                return {
+                    'race_id': race_id,
+                    'race_name': '',  # H1レコードにはレース名がない
+                    'record_id': record_id,
+                    'raw_data': raw_data
+                }
+
+            # RAレコード（レース詳細）の場合
+            else:
+                if len(raw_data) < 50:
+                    return None
+
+                # レースID: 位置11-26
+                race_id = raw_data[11:27].strip() if len(raw_data) > 27 else ""
+
+                # レース名: 位置112-162（推定）
+                race_name = raw_data[112:162].strip() if len(raw_data) > 162 else ""
+
+                return {
+                    'race_id': race_id,
+                    'race_name': race_name,
+                    'record_id': 'RA',
+                    'raw_data': raw_data
+                }
 
         except Exception as e:
-            logger.error(f"Failed to parse race info: {e}")
+            logger.error(f"Failed to parse race info ({record_id}): {e}")
             return None
 
     def get_realtime_odds(

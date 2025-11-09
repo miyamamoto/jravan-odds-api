@@ -24,9 +24,13 @@ class JRAVANOddsFetcher:
         初期化
 
         Args:
-            service_key: JRA-VANのサービスキー（デフォルトは"UNKNOWN"）
+            service_key: JRA-VANのサービスキー（このパラメータは使用されません）
+                        実際のサービスキーはJV-Link設定ツールで設定します
+                        JVInitには常に'UNKNOWN'を渡します
         """
-        self.service_key = service_key
+        # JV-Link設定ツールでサービスキーを設定している場合、
+        # JVInitには'UNKNOWN'を渡すのが正しい実装方法
+        self.service_key = 'UNKNOWN'
         self.jvlink = None
         self.is_initialized = False
 
@@ -47,8 +51,8 @@ class JRAVANOddsFetcher:
                 print(f"JVInit エラー: {ret}")
                 return False
 
-            # UI設定
-            ret = self.jvlink.JVSetUIProperties()
+            # UI設定はJV-Link設定ツールで事前に行うため、ここでは呼び出さない
+            # ret = self.jvlink.JVSetUIProperties()
 
             self.is_initialized = True
             print("JV-Link初期化完了")
@@ -80,8 +84,8 @@ class JRAVANOddsFetcher:
         odds_data = []
 
         try:
-            # 速報系データを開く (0B31: レース詳細・オッズ)
-            dataspec = "0B31"
+            # 速報系データを開く (0B30: 全賭式オッズ - O1〜O6全て)
+            dataspec = "0B30"
             ret = self.jvlink.JVRTOpen(dataspec, race_id)
 
             if isinstance(ret, tuple):
@@ -149,37 +153,36 @@ class JRAVANOddsFetcher:
             Optional[Dict]: パースされたオッズ情報
         """
         try:
+            from odds_parser import parse_odds_record
+
+            # odds_parser.pyのparse_odds_record関数を使用
+            parsed_data = parse_odds_record(rec_id, buff)
+
+            if parsed_data:
+                # タイムスタンプを追加
+                parsed_data['timestamp'] = datetime.now().isoformat()
+                return parsed_data
+
+            # パースに失敗した場合は基本情報のみ返す
             odds_info = {
                 'record_id': rec_id,
                 'record_type': self._get_record_type_name(rec_id),
-                'raw_data': buff[:100],  # 最初の100文字のみ保存
+                'raw_data': buff[:100],
                 'timestamp': datetime.now().isoformat()
             }
 
-            # 各レコードタイプに応じた基本的なパース
+            # タイプ名を設定
             if rec_id == 'O1':
-                # 単勝・複勝オッズ
                 odds_info['type'] = '単勝・複勝'
-                # 詳細なパースは仕様書に基づいて実装
-
             elif rec_id == 'O2':
-                # 枠連オッズ
                 odds_info['type'] = '枠連'
-
             elif rec_id == 'O3':
-                # 馬連オッズ
                 odds_info['type'] = '馬連'
-
             elif rec_id == 'O4':
-                # ワイドオッズ
                 odds_info['type'] = 'ワイド'
-
             elif rec_id == 'O5':
-                # 馬単オッズ
                 odds_info['type'] = '馬単'
-
             elif rec_id == 'O6':
-                # 三連複・三連単オッズ
                 odds_info['type'] = '三連複・三連単'
 
             return odds_info

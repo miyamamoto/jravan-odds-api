@@ -65,17 +65,34 @@ def setup_database(
     print(f"[OK] Cache initialized at {cache_dir}")
     print()
 
-    # データベースセットアップ
-    print("Starting database setup...")
-    print("Note: This may take several minutes for the first time.")
-    print()
+    # キャッシュの存在確認
+    dates = generate_date_range(start_date, end_date)
+    cache_exists = False
+    for date in dates:
+        cached_races = cache.get_cached_races(date)
+        if cached_races:
+            cache_exists = True
+            print(f"[INFO] Found existing cache for {date} ({len(cached_races)} races)")
 
-    success, record_count = fetcher.setup_database(
-        start_date=start_date,
-        end_date=end_date,
-        dataspec=dataspec,
-        show_dialog=show_dialog
-    )
+    if cache_exists:
+        print()
+        print("[INFO] Cache already exists. Skipping database setup.")
+        print("[INFO] If you want to re-download data, delete the cache directory first.")
+        print()
+        success = True
+        record_count = 0
+    else:
+        # データベースセットアップ
+        print("Starting database setup...")
+        print("Note: This may take several minutes for the first time.")
+        print()
+
+        success, record_count = fetcher.setup_database(
+            start_date=start_date,
+            end_date=end_date,
+            dataspec=dataspec,
+            show_dialog=show_dialog
+        )
 
     if not success:
         logger.error("Database setup failed")
@@ -103,35 +120,27 @@ def setup_database(
             race_dict = {}
 
             for data in race_data:
-                if data['record_id'] == 'RA':
-                    race_info = parse_race_info_simple(data['raw_data'])
+                # RA (レース詳細) または H1 (馬毎レース情報) からレース情報を抽出
+                if data['record_id'] in ['RA', 'H1', 'H6']:
+                    race_info = parse_race_info_simple(data['raw_data'], data['record_id'])
                     if race_info:
                         race_id = race_info['race_id']
-                        race_dict[race_id] = race_info
+                        if race_id not in race_dict:  # 重複を避ける
+                            race_dict[race_id] = race_info
 
             print(f"  Found {len(race_dict)} races")
 
-            # オッズデータを取得
-            odds_data = fetcher.get_odds_data(date)
+            # 注意: 蓄積系データにはリアルタイムオッズは含まれないため、
+            # レース情報のみをキャッシュします
+            # オッズデータはリアルタイム取得時に速報系データ（JVRTOpen）から取得されます
 
-            # レースIDごとにグループ化
-            odds_by_race = {}
-            for data in odds_data:
-                parsed = parse_odds_record(data['record_id'], data['raw_data'])
-                if parsed:
-                    race_id = parsed.get('race_id', '')
-                    if race_id:
-                        if race_id not in odds_by_race:
-                            odds_by_race[race_id] = []
-                        odds_by_race[race_id].append(parsed)
-
-            # キャッシュに保存
-            for race_id, odds_list in odds_by_race.items():
-                race_info = race_dict.get(race_id, {})
-                cache.save_odds(race_id, odds_list, race_info)
+            # レース情報のみをキャッシュに保存
+            for race_id, race_info in race_dict.items():
+                # 空のオッズリストでキャッシュ（レース情報のみ）
+                cache.save_odds(race_id, [], race_info)
                 total_races += 1
 
-            print(f"  Cached {len(odds_by_race)} races")
+            print(f"  Cached {len(race_dict)} races (race info only)")
             print()
 
         print("=" * 80)
@@ -158,39 +167,59 @@ def setup_database(
         fetcher.close()
 
 
-def parse_race_info_simple(raw_data: str) -> dict:
+def parse_race_info_simple(raw_data: str, record_id: str = 'RA') -> dict:
     """
     レース情報レコードを簡易パース
 
     Args:
         raw_data: 生データ
+        record_id: レコードID ('RA', 'H1', etc.)
 
     Returns:
         dict: レース情報
     """
     try:
-        if len(raw_data) < 50:
+        if len(raw_data) < 30:
             return None
 
-        # レースID: 位置11-26
-        race_id = raw_data[11:27].strip() if len(raw_data) > 27 else ""
+        # H1レコード（馬毎レース情報）の場合
+        if record_id == 'H1' or record_id == 'H6':
+            # H1レコードフォーマット:
+            # H1[2] + データ区分[1] + 年月日[8] + レースID[16] + ...
+            # 位置: 0-1=H1, 2=データ区分, 3-10=年月日, 11-26=レースID
+            if len(raw_data) < 27:
+                return None
 
-        # 発走時刻: 位置42-45 (HHMM形式)
-        post_time_raw = raw_data[42:46] if len(raw_data) > 46 else "1000"
-        post_time = f"{post_time_raw[:2]}:{post_time_raw[2:]}"
+            race_id = raw_data[11:27].strip() if len(raw_data) > 27 else ""
 
-        # レース名: 位置112-162
-        race_name = raw_data[112:162].strip() if len(raw_data) > 162 else ""
+            return {
+                'race_id': race_id,
+                'race_name': '',  # H1レコードにはレース名がない
+                'post_time': '',   # H1レコードには発走時刻がない
+                'record_id': record_id
+            }
 
-        return {
-            'race_id': race_id,
-            'race_name': race_name,
-            'post_time': post_time,
-            'record_id': 'RA'
-        }
+        # RAレコード（レース詳細）の場合
+        else:
+            # レースID: 位置11-26
+            race_id = raw_data[11:27].strip() if len(raw_data) > 27 else ""
+
+            # 発走時刻: 位置42-45 (HHMM形式)
+            post_time_raw = raw_data[42:46] if len(raw_data) > 46 else "1000"
+            post_time = f"{post_time_raw[:2]}:{post_time_raw[2:]}"
+
+            # レース名: 位置112-162
+            race_name = raw_data[112:162].strip() if len(raw_data) > 162 else ""
+
+            return {
+                'race_id': race_id,
+                'race_name': race_name,
+                'post_time': post_time,
+                'record_id': 'RA'
+            }
 
     except Exception as e:
-        logger.warning(f"Failed to parse race info: {e}")
+        logger.warning(f"Failed to parse race info ({record_id}): {e}")
         return None
 
 
@@ -256,8 +285,8 @@ def main():
 
     parser.add_argument(
         "--dataspec",
-        help="Data specification code (default: 0B31)",
-        default="0B31"
+        help="Data specification code (default: RACE for race info, DIFF for all data)",
+        default="RACE"
     )
 
     parser.add_argument(

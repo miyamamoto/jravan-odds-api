@@ -250,16 +250,61 @@ class OddsParser:
             Dict: パースされた三連複・三連単オッズ
         """
         try:
+            # ヘッダー情報
             odds_data = {
                 'record_type': '三連複・三連単オッズ',
                 'record_id': buff[0:2].strip(),
                 'data_kbn': buff[2:3].strip(),
                 'race_key': buff[3:19].strip(),
-                'odds_time': buff[19:25].strip(),
-                'sanrenpuku': [],
-                'sanrentan': [],
+                'odds_time': buff[19:25].strip() if len(buff) > 25 else '',
+                'odds_data': {},
                 'parsed_at': datetime.now().isoformat()
             }
+
+            # オッズデータ部分の開始位置（ヘッダー40バイト）
+            HEADER_LEN = 40
+            ENTRY_LEN = 17  # 馬番6バイト + その他4バイト + オッズ7バイト
+
+            if len(buff) <= HEADER_LEN:
+                return odds_data
+
+            odds_part = buff[HEADER_LEN:]
+
+            # エントリをパース
+            num_entries = len(odds_part) // ENTRY_LEN
+
+            for i in range(num_entries):
+                start = i * ENTRY_LEN
+                end = start + ENTRY_LEN
+
+                if end > len(odds_part):
+                    break
+
+                entry = odds_part[start:end]
+
+                # 馬番（2バイト × 3）
+                uma1 = entry[0:2].strip()
+                uma2 = entry[2:4].strip()
+                uma3 = entry[4:6].strip()
+
+                # オッズ値（位置6-13の7バイト、10で割る）
+                odds_str = entry[6:13].strip()
+
+                if uma1 and uma2 and uma3 and odds_str:
+                    try:
+                        # 馬番の組み合わせをキーに
+                        combo_key = f"{uma1}-{uma2}-{uma3}"
+
+                        # オッズ値を計算
+                        odds_value = float(odds_str) / 10.0
+
+                        # 0.0倍のデータは除外（発売されていない組み合わせ）
+                        if odds_value > 0.0:
+                            odds_data['odds_data'][combo_key] = odds_value
+
+                    except ValueError:
+                        # パースエラーはスキップ
+                        continue
 
             return odds_data
 
@@ -270,17 +315,66 @@ class OddsParser:
             }
 
 
+def parse_jg_record(buff: str) -> Dict:
+    """
+    時系列オッズ情報（JGレコード）をパース
+
+    Args:
+        buff: データバッファ
+
+    Returns:
+        Dict: パースされた時系列オッズデータ
+    """
+    try:
+        # JGレコードフォーマット:
+        # JG[2] + データ区分[1] + 年月日[8] + レースID[16] + 発走時刻[4] + オッズ時刻[6] + データ...
+        if len(buff) < 50:
+            return None
+
+        race_id = buff[11:27].strip() if len(buff) > 27 else ""
+        post_time_raw = buff[27:31] if len(buff) > 31 else "1000"
+        post_time = f"{post_time_raw[:2]}:{post_time_raw[2:]}" if len(post_time_raw) == 4 else "10:00"
+        odds_time = buff[31:37] if len(buff) > 37 else ""
+
+        # 時刻フォーマット
+        odds_time_formatted = ""
+        if len(odds_time) == 6:
+            odds_time_formatted = f"{odds_time[0:2]}:{odds_time[2:4]}:{odds_time[4:6]}"
+
+        return {
+            'record_type': '時系列オッズ',
+            'record_id': 'JG',
+            'race_id': race_id,
+            'post_time': post_time,
+            'odds_time': odds_time,
+            'odds_time_formatted': odds_time_formatted,
+            'tansho': [],  # JGレコードには簡易オッズ情報が含まれる
+            'fukusho': [],
+            'raw_data': buff,
+            'parsed_at': datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            'error': f'JGレコードパースエラー: {e}',
+            'raw_data': buff[:100] if len(buff) > 100 else buff
+        }
+
+
 def parse_odds_record(record_id: str, buff: str) -> Dict:
     """
     オッズレコードをパース（統合関数）
 
     Args:
-        record_id: レコードID (O1-O6)
+        record_id: レコードID (O1-O6, JG)
         buff: データバッファ
 
     Returns:
         Dict: パースされたオッズデータ
     """
+    # JGレコードの場合
+    if record_id == 'JG':
+        return parse_jg_record(buff)
+
     parser = OddsParser()
 
     parsers = {

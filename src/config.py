@@ -6,6 +6,12 @@
 
 import os
 from enum import Enum
+from pathlib import Path
+from dotenv import load_dotenv
+
+# .envファイルを読み込み
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 
 class Environment(str, Enum):
