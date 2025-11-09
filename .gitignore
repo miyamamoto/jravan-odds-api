@@ -46,6 +46,7 @@ Thumbs.db
 
 # ログファイル
 *.log
+logs/
 
 # JSONファイル（mock_data内は除外）
 *.json

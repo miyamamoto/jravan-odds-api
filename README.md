@@ -28,6 +28,21 @@ APIドキュメント: http://localhost:8000/docs
 
 **注**: データソース（過去データ/リアルタイム）はAPI呼び出し時に`data_source`パラメータで指定できます。
 
+### 3. Windows自動起動設定（オプション）
+
+Windows起動時にAPIサーバーを自動起動する設定：
+
+```powershell
+# 管理者権限でPowerShellを起動
+.\setup_autostart.ps1
+```
+
+管理コマンド：
+- `.\check_autostart.ps1` - 状態確認
+- `.\disable_autostart.ps1` - 自動起動を無効化
+- `.\enable_autostart.ps1` - 自動起動を有効化
+- `.\remove_autostart.ps1` - 設定を削除
+
 ## 必要な環境
 
 ### 開発モード
