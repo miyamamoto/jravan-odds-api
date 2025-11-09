@@ -88,7 +88,15 @@ class DataService:
 
         Returns:
             str: 解決されたデータソース
+
+        Raises:
+            ValueError: 不正なデータソースが指定された場合
         """
+        # バリデーション
+        valid_sources = ['auto', 'historical', 'realtime', 'mock']
+        if data_source not in valid_sources:
+            raise ValueError(f"不正なデータソース: {data_source}。有効な値: {', '.join(valid_sources)}")
+
         if data_source != 'auto':
             return data_source
 
@@ -154,7 +162,12 @@ class DataService:
             else:
                 raise ValueError(f"不正なデータソース: {source}")
 
+        except ValueError as e:
+            # バリデーションエラーは再スロー
+            logger.error(f"レース情報取得エラー: {e}")
+            raise
         except Exception as e:
+            # その他のエラーはログに記録して空リストを返す
             logger.error(f"レース情報取得エラー: {e}")
             return []
 
@@ -253,7 +266,12 @@ class DataService:
 
             return result
 
+        except ValueError as e:
+            # バリデーションエラーは再スロー
+            logger.error(f"オッズ取得エラー: {e}")
+            raise
         except Exception as e:
+            # その他のエラーはログに記録してエラー情報を返す
             logger.error(f"オッズ取得エラー: {e}")
             return {
                 'odds': [],
@@ -296,7 +314,12 @@ class DataService:
                 return None
             else:
                 raise ValueError(f"不正なデータソース: {source}")
+        except ValueError as e:
+            # バリデーションエラーは再スロー
+            logger.error(f"レース詳細取得エラー: {e}")
+            raise
         except Exception as e:
+            # その他のエラーはログに記録してNoneを返す
             logger.error(f"レース詳細取得エラー: {e}")
             return None
 
