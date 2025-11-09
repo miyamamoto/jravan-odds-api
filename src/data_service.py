@@ -192,17 +192,14 @@ class DataService:
                     seconds_before_deadline
                 )
 
-            # レース詳細を取得してpost_timeを取得
-            race_detail = self.get_race_detail(race_id, data_source=source)
+            # post_timeを取得（無限再帰を避けるためデフォルト値を使用）
+            post_time = '10:00'
 
-            if not race_detail:
-                return {
-                    'odds': [],
-                    'error': 'レース情報が見つかりません',
-                    'is_past_data': False
-                }
-
-            post_time = race_detail.get('post_time', '10:00')
+            # mockモードの場合はpost_timeを取得
+            if source == 'mock' and self.mock_provider:
+                race_detail = self.mock_provider.get_race_detail(race_id)
+                if race_detail:
+                    post_time = race_detail.get('post_time', '10:00')
 
             # 締め切り情報を取得
             deadline_info = TimeManager.get_deadline_info(race_id, post_time)

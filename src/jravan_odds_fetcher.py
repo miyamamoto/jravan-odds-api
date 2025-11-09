@@ -15,6 +15,8 @@ import sys
 from datetime import datetime
 from typing import Optional, Dict, List
 
+from .odds_parser import parse_odds_record
+
 
 class JRAVANOddsFetcher:
     """JRA-VANからオッズデータを取得するクラス"""
@@ -153,8 +155,6 @@ class JRAVANOddsFetcher:
             Optional[Dict]: パースされたオッズ情報
         """
         try:
-            from odds_parser import parse_odds_record
-
             # odds_parser.pyのparse_odds_record関数を使用
             parsed_data = parse_odds_record(rec_id, buff)
 
@@ -255,9 +255,17 @@ class JRAVANOddsFetcher:
                 if len(buff) >= 2:
                     rec_id = buff[0:2]
                     if rec_id == 'RA':  # レース詳細
+                        # RAレコードからrace_idを抽出
+                        # レースキー位置: 12-27 (16バイト)
+                        if len(buff) >= 28:
+                            race_id = buff[11:27].strip()  # 位置12-27（0-indexed: 11-27）
+                        else:
+                            race_id = ''
+
                         race_info = {
                             'record_id': rec_id,
-                            'raw_data': buff[:100]
+                            'race_id': race_id,
+                            'raw_data': buff
                         }
                         race_info_list.append(race_info)
 
